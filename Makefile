@@ -1,14 +1,4 @@
 # -------- cgpt-cli deps workflow (pip-tools) --------
-# Usage:
-#   make venv          # create .venv and install pip-tools
-#   make compile       # build requirements.txt + requirements_dev.txt (with hashes)
-#   make install       # install runtime deps exactly (hash-checked)
-#   make install-dev   # install dev deps exactly (hash-checked)
-#   make upgrade PKG=requests   # bump one base package
-#   make upgrade-all            # bump all base packages
-#   make format / lint / type / test / cov / qa
-#   make act-pr-dlc / act-push-dlc / act-lockcheck-dlc / act-dlc-smoke / act-dlc-list
-# ----------------------------------------------------
 
 .DEFAULT_GOAL := help
 
@@ -56,7 +46,8 @@ ACT_EXTRA_FLAGS ?=
         upgrade upgrade-all show clean nuke activate \
         format lint lint-fix type test cov qa check-src \
         act-pr act-push act-lockcheck act-smoke act-list act-pr-debug \
-        sanity-check sanity-clean
+        sanity-check sanity-clean \
+        pre-commit-run pre-commit-update pre-commit-ci
 
 help: ## Show this help
 	@echo
@@ -107,15 +98,15 @@ type: ## MyPy static type-check
 	$(MYPY) $(PY_SRC)
 
 test: ## Run tests
-	$(VENV_BIN)/pytest -qv
+	$(PIP) install -e .
+	$(PYTEST) -qv
 
 cov: ## Tests with coverage report
 	$(PYTEST) --cov=$(COV_TARGET) --cov-report=term-missing
 
-qa: ## Full quality gate (lint, type, tests)
+qa: ## Full quality gate (lint, type)
 	$(RUFF) check $(PY_SRC)
 	$(MYPY) $(PY_SRC)
-	$(PYTEST)
 
 
 # ---------- act helpers ----------
@@ -169,3 +160,13 @@ sanity-check: venv ## Build sdist/wheel and verify CLI works
 
 sanity-clean: ## Remove build artifacts (dist/, build/, *.egg-info)
 	rm -rf dist build *.egg-info
+
+# ------------- Pre-commit ---------------
+pre-commit-run: ## Run pre-commit on all files
+	$(VENV_BIN)/pre-commit run --all-files
+
+pre-commit-update: ## Autoupdate hook revisions
+	$(VENV_BIN)/pre-commit autoupdate
+
+pre-commit-ci: ## Run hooks in CI mode (fails on issues)
+	$(VENV_BIN)/pre-commit run --all-files --show-diff-on-failure --color=always
