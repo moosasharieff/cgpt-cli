@@ -87,3 +87,42 @@ def load_config() -> Config:
         api_key=data.get(KEY_API) or None,
         base_url=data.get(KEY_BASE_URL) or None,
     )
+def save_config(cfg: Config) -> Path:
+    """Save the given Config object to a TOML file.
+
+    Creates the config directory if necessary.
+    Sets secure permissions on Unix (700 for dir, 600 for file).
+    Escapes backslashes/quotes to preserve TOML validity.
+
+    Args:
+        cfg (Config): Config values to save.
+
+    Returns:
+        Path: The path to the written config file.
+    """
+    d = config_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        if not sys.platform.startswith("win"):
+            os.chmod(d, 0o700)
+    except Exception:
+        pass
+
+    lines = []
+    if cfg.api_key is not None:
+        lines.append(f'{KEY_API} = "{_escape(cfg.api_key)}"')
+    if cfg.base_url is not None:
+        lines.append(f'{KEY_BASE_URL} = "{_escape(cfg.base_url)}"')
+
+    content = "\n".join(lines) + ("\n" if lines else "")
+    p = config_path()
+    p.write_text(content, encoding="utf-8")
+
+    try:
+        if not sys.platform.startswith("win"):
+            os.chmod(p, 0o600)
+    except Exception:
+        pass
+
+    return p
+
