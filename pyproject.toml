@@ -16,15 +16,15 @@ license = {text = "MIT"}
 dependencies = [
   "typer"
 ]
-requires-python = ">= 3.10"
+requires-python = ">= 3.11"
 
 [project.optional-dependencies]
 test = [
     "coverage",  # testing
     "pytest",  # testing
     "ruff",  # linting
-    "ty", # checking types
-    "ipdb", # debugging
+    "mypy",  # type checking
+    "ipdb",  # debugging
 ]
 
 [project.urls]
