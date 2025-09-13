@@ -15,8 +15,7 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
+from typing import Optional, Mapping
 
 APP_NAME = "cgpt"
 CONFIG_FILE = "config.toml"
@@ -34,8 +33,10 @@ class Config:
         api_key (Optional[str]): User's API key, or None if unset.
         base_url (Optional[str]): Optional base URL for API, or None if unset.
     """
+
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+
 
 def _xdg_config_home() -> Path:
     """Return the base config directory for Linux/macOS.
@@ -57,6 +58,7 @@ def _windows_config_home() -> Path:
     if appdata:
         return Path(appdata)
     return Path.home() / "AppData" / "Roaming"
+
 
 def config_dir() -> Path:
     """Return the platform-specific directory for cgpt config."""
@@ -87,6 +89,8 @@ def load_config() -> Config:
         api_key=data.get(KEY_API) or None,
         base_url=data.get(KEY_BASE_URL) or None,
     )
+
+
 def save_config(cfg: Config) -> Path:
     """Save the given Config object to a TOML file.
 
@@ -126,3 +130,36 @@ def save_config(cfg: Config) -> Path:
 
     return p
 
+
+def resolve_api_key(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """Resolve the API key, preferring config file then OPENAI_API_KEY env.
+
+    Args:
+        env (Optional[dict[str, str]]): Optional env mapping for testing.
+
+    Returns:
+        Optional[str]: The resolved API key, or None if not found.
+    """
+    env = env or os.environ
+    cfg = load_config()
+    if cfg.api_key:
+        return cfg.api_key
+    return env.get("OPENAI_API_KEY")
+
+
+def resolve_base_url(env: Optional[dict[str, str]] = None) -> Optional[str]:
+    """Resolve the base_url from config, no env fallback.
+
+    Args:
+        env (Optional[dict[str, str]]): Included for symmetry; unused.
+
+    Returns:
+        Optional[str]: The resolved base_url, or None if not found.
+    """
+    cfg = load_config()
+    return cfg.base_url or None
+
+
+def _escape(value: str) -> str:
+    """Escape quotes and backslashes for safe TOML string values."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
