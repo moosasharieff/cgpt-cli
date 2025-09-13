@@ -1,22 +1,14 @@
-"""Console script for cgpt."""
-
-import typer
-from rich.console import Console
-
-from cgpt import utils
-
-app = typer.Typer()
-console = Console()
+import sys
+import click
 
 
-@app.command()
-def main():
-    """Console script for cgpt."""
-    console.print("Replace this message by putting your code into "
-               "cgpt.cli.main")
-    console.print("See Typer documentation at https://typer.tiangolo.com/")
-    utils.do_something_useful()
+@click.command()
+@click.option("--name", "-n", default="World", help="Who to greet")
+def main(name: str) -> None:
+    """Entry point for the cgpt CLI."""
+    click.echo(f"Hello, {name}! from cgpt")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    app()
+    main()
