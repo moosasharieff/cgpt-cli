@@ -15,7 +15,6 @@ PYTHON      := $(VENV_BIN)/python
 PIP         := $(VENV_BIN)/pip
 PIP_COMPILE := $(VENV_BIN)/pip-compile
 PIP_SYNC    := $(VENV_BIN)/pip-sync
-BLACK       := $(VENV_BIN)/black
 RUFF        := $(VENV_BIN)/ruff
 MYPY        := $(VENV_BIN)/mypy
 PYTEST      := $(VENV_BIN)/pytest
@@ -84,15 +83,15 @@ upgrade-all: venv ## Upgrade all base deps (then refresh dev)
 	$(PIP_COMPILE) --generate-hashes $(REQ_DEV_IN)
 
 # ---------- Quality targets ----------
-format: ## Format code with Black
-	$(BLACK) $(PY_SRC)
+format: ## Format code with Ruff formatter
+	$(RUFF) format $(PY_SRC)
 
 lint: ## Ruff lint (no changes)
 	$(RUFF) check $(PY_SRC)
 
-lint-fix: ## Ruff auto-fix, then Black format
+lint-fix: ## Ruff auto-fix, then format
 	$(RUFF) check --fix $(PY_SRC)
-	$(BLACK) $(PY_SRC)
+	$(RUFF) format $(PY_SRC)
 
 type: ## MyPy static type-check
 	$(MYPY) $(PY_SRC)
