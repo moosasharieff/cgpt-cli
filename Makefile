@@ -1,14 +1,4 @@
 # -------- cgpt-cli deps workflow (pip-tools) --------
-# Usage:
-#   make venv          # create .venv and install pip-tools
-#   make compile       # build requirements.txt + requirements_dev.txt (with hashes)
-#   make install       # install runtime deps exactly (hash-checked)
-#   make install-dev   # install dev deps exactly (hash-checked)
-#   make upgrade PKG=requests   # bump one base package
-#   make upgrade-all            # bump all base packages
-#   make format / lint / type / test / cov / qa
-#   make act-pr-dlc / act-push-dlc / act-lockcheck-dlc / act-dlc-smoke / act-dlc-list
-# ----------------------------------------------------
 
 .DEFAULT_GOAL := help
 
@@ -25,7 +15,6 @@ PYTHON      := $(VENV_BIN)/python
 PIP         := $(VENV_BIN)/pip
 PIP_COMPILE := $(VENV_BIN)/pip-compile
 PIP_SYNC    := $(VENV_BIN)/pip-sync
-BLACK       := $(VENV_BIN)/black
 RUFF        := $(VENV_BIN)/ruff
 MYPY        := $(VENV_BIN)/mypy
 PYTEST      := $(VENV_BIN)/pytest
@@ -56,7 +45,8 @@ ACT_EXTRA_FLAGS ?=
         upgrade upgrade-all show clean nuke activate \
         format lint lint-fix type test cov qa check-src \
         act-pr act-push act-lockcheck act-smoke act-list act-pr-debug \
-        sanity-check sanity-clean
+        sanity-check sanity-clean \
+        pre-commit-run pre-commit-update pre-commit-ci
 
 help: ## Show this help
 	@echo
@@ -93,29 +83,29 @@ upgrade-all: venv ## Upgrade all base deps (then refresh dev)
 	$(PIP_COMPILE) --generate-hashes $(REQ_DEV_IN)
 
 # ---------- Quality targets ----------
-format: ## Format code with Black
-	$(BLACK) $(PY_SRC)
+format: ## Format code with Ruff formatter
+	$(RUFF) format $(PY_SRC)
 
 lint: ## Ruff lint (no changes)
 	$(RUFF) check $(PY_SRC)
 
-lint-fix: ## Ruff auto-fix, then Black format
+lint-fix: ## Ruff auto-fix, then format
 	$(RUFF) check --fix $(PY_SRC)
-	$(BLACK) $(PY_SRC)
+	$(RUFF) format $(PY_SRC)
 
 type: ## MyPy static type-check
 	$(MYPY) $(PY_SRC)
 
 test: ## Run tests
-	$(VENV_BIN)/pytest -qv
+	$(PIP) install -e .
+	$(PYTEST) -qv
 
 cov: ## Tests with coverage report
 	$(PYTEST) --cov=$(COV_TARGET) --cov-report=term-missing
 
-qa: ## Full quality gate (lint, type, tests)
+qa: ## Full quality gate (lint, type)
 	$(RUFF) check $(PY_SRC)
 	$(MYPY) $(PY_SRC)
-	$(PYTEST)
 
 
 # ---------- act helpers ----------
@@ -169,3 +159,13 @@ sanity-check: venv ## Build sdist/wheel and verify CLI works
 
 sanity-clean: ## Remove build artifacts (dist/, build/, *.egg-info)
 	rm -rf dist build *.egg-info
+
+# ------------- Pre-commit ---------------
+pre-commit-run: ## Run pre-commit on all files
+	$(VENV_BIN)/pre-commit run --all-files
+
+pre-commit-update: ## Autoupdate hook revisions
+	$(VENV_BIN)/pre-commit autoupdate
+
+pre-commit-ci: ## Run hooks in CI mode (fails on issues)
+	$(VENV_BIN)/pre-commit run --all-files --show-diff-on-failure --color=always

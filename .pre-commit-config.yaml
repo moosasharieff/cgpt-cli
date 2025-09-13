@@ -1,0 +1,33 @@
+# .pre-commit-config.yaml
+ci:
+  autoupdate_schedule: yearly
+
+# Ensure pre-commit uses the right Python when a hook uses system Python
+default_language_version:
+  python: python3.11
+
+repos:
+  # Ruff: lint + autofix
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.4
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # mypy: run from your project's venv (no isolated env)
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (local venv)
+        entry: python -m mypy
+        language: system
+        types: [python]
+
+  # Basics: whitespace, eof, merge conflicts
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
