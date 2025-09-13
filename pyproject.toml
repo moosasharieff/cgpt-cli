@@ -23,8 +23,8 @@ test = [
     "coverage",  # testing
     "pytest",  # testing
     "ruff",  # linting
-    "ty", # checking types
-    "ipdb", # debugging
+    "mypy",  # type checking
+    "ipdb",  # debugging
 ]
 
 [project.urls]
