@@ -76,5 +76,6 @@ jobs:
           python -c "print('Deps OK')"
 
       - name: 'Removing .ci-venv'
+        if: always()
         run: |
-          rm -r .ci-venv
+          rm -rf .ci-venv
