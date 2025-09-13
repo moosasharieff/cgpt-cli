@@ -1,0 +1,8 @@
+-r requirements.txt
+
+black
+ruff
+mypy
+pip-tools
+pytest
+pytest-cov
