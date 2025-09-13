@@ -6,8 +6,8 @@
 #   make install-dev   # install dev deps exactly (hash-checked)
 #   make upgrade PKG=requests   # bump one base package
 #   make upgrade-all            # bump all base packages
-#   make format qa / lint / type / test / cov / format
-#   make show / clean / nuke / activate
+#   make format / lint / type / test / cov / qa
+#   make act-pr-dlc / act-push-dlc / act-lockcheck-dlc / act-dlc-smoke / act-dlc-list
 # ----------------------------------------------------
 
 .DEFAULT_GOAL := help
@@ -32,21 +32,36 @@ PYTEST      := $(VENV_BIN)/pytest
 
 # Add directories to apply linting
 PY_SRC := src tests
+COV_TARGET ?= $(firstword $(filter src/cgpt_cli cgpt_cli,$(FOUND_SRC)))
+COV_TARGET := $(if $(COV_TARGET),$(COV_TARGET),.)
 
 REQ_BASE_IN   := requirements.in
 REQ_BASE_TXT  := requirements.txt
 REQ_DEV_IN    := requirements_dev.in
 REQ_DEV_TXT   := requirements_dev.txt
 
+# -------- act (GitHub Actions locally) --------
+# Requires Docker + act. Apple Silicon defaults to linux/amd64.
+ACT ?= act
+ACT_WORKFLOW ?= .github/workflows/deps-lock-check.yml
+ACT_IMAGE ?= ghcr.io/catthehacker/ubuntu:act-22.04
+ACT_PLATFORM ?= ubuntu-latest=$(ACT_IMAGE)
+UNAME_M := $(shell uname -m)
+ifeq ($(UNAME_M),arm64)
+  ACT_ARCH_FLAG ?= --container-architecture linux/amd64
+endif
+ACT_EXTRA_FLAGS ?=
+
 .PHONY: help venv compile compile-base compile-dev install install-dev \
         upgrade upgrade-all show clean nuke activate \
-        format lint lint-fix type test cov qa
+        format lint lint-fix type test cov qa check-src \
+        act-pr act-push act-lockcheck act-smoke act-list act-pr-debug
 
 help: ## Show this help
 	@echo
 	@echo "Commands:"
 	@grep -E '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILE_LIST) | \
-	  sed -E 's/^([a-zA-Z0-9_.-]+):.*##[[:space:]]*(.*)/  \1\t\2/'
+	  sed -E 's/^([a-zA-Z0-9_.-]+):.*##[[:space:]]*(.*)/  \1\t\t\2/'
 
 venv: ## Create .venv and install pip-tools
 	@test -d "$(VENV)" || $(PY) -m venv "$(VENV)"
@@ -77,30 +92,50 @@ upgrade-all: venv ## Upgrade all base deps (then refresh dev)
 	$(PIP_COMPILE) --upgrade --generate-hashes $(REQ_BASE_IN)
 	$(PIP_COMPILE) --generate-hashes $(REQ_DEV_IN)
 
-# ---------- Quality targets (require dev tools installed) ----------
+# ---------- Quality targets ----------
 format: ## Format code with Black
 	$(BLACK) $(PY_SRC)
 
-lint: ## Run Ruff lint (no changes)
+lint: ## Ruff lint (no changes)
 	$(RUFF) check $(PY_SRC)
 
-lint-fix: ## Run Ruff auto-fix then Black format
+lint-fix: ## Ruff auto-fix, then Black format
 	$(RUFF) check --fix $(PY_SRC)
 	$(BLACK) $(PY_SRC)
 
-type: ## Static type-check with MyPy
+type: ## MyPy static type-check
 	$(MYPY) $(PY_SRC)
 
-test: ## Run test suite with pytest
+test: ## Run tests
 	$(PYTEST)
 
-cov: ## Run tests with coverage report
-	$(PYTEST) --cov=$(PKG) --cov-report=term-missing
+cov: ## Tests with coverage report
+	$(PYTEST) --cov=$(COV_TARGET) --cov-report=term-missing
 
-qa: ## Run full quality gate (lint, type, tests)
+qa: ## Full quality gate (lint, type, tests)
 	$(RUFF) check $(PY_SRC)
 	$(MYPY) $(PY_SRC)
 	$(PYTEST)
+
+
+# ---------- act helpers ----------
+act-pr-dlc: ## Run deps-lock-check (pull_request) locally with act
+	$(ACT) pull_request -W $(ACT_WORKFLOW) -P $(ACT_PLATFORM) $(ACT_ARCH_FLAG) --bind $(ACT_EXTRA_FLAGS)
+
+act-push-dlc: ## Run deps-lock-check (push) locally with act
+	$(ACT) push -W $(ACT_WORKFLOW) -P $(ACT_PLATFORM) $(ACT_ARCH_FLAG) --bind $(ACT_EXTRA_FLAGS)
+
+act-dlc-lockcheck: ## Run only 'lockcheck' job (pull_request) via act
+	$(ACT) pull_request -W $(ACT_WORKFLOW) -j lockcheck -P $(ACT_PLATFORM) $(ACT_ARCH_FLAG) --bind $(ACT_EXTRA_FLAGS)
+
+act-dlc-smoke: ## Run only 'smoke-install' job (pull_request) via act
+	$(ACT) pull_request -W $(ACT_WORKFLOW) -j smoke-install -P $(ACT_PLATFORM) $(ACT_ARCH_FLAG) --bind $(ACT_EXTRA_FLAGS)
+
+act-dlc-list: ## List jobs detected in $(ACT_WORKFLOW)
+	$(ACT) -l -W $(ACT_WORKFLOW)
+
+act-pr-dlc-debug: ## Run deps-lock-check (pull_request) via act with debug + reuse
+	$(ACT) pull_request -W $(ACT_WORKFLOW) -P $(ACT_PLATFORM) $(ACT_ARCH_FLAG) --bind -r --secret ACTIONS_STEP_DEBUG=true $(ACT_EXTRA_FLAGS)
 
 # ---------- Misc ----------
 show: venv ## Print Python/pip/pip-tools versions inside .venv

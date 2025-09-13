@@ -205,5 +205,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Added Temporarily
-.github
+.github/workflows/test.yml
 commit_msg.txt
+.ci-venv
