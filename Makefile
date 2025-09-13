@@ -55,13 +55,13 @@ ACT_EXTRA_FLAGS ?=
 .PHONY: help venv compile compile-base compile-dev install install-dev \
         upgrade upgrade-all show clean nuke activate \
         format lint lint-fix type test cov qa check-src \
-        act-pr act-push act-lockcheck act-smoke act-list act-pr-debug
+        act-pr act-push act-lockcheck act-smoke act-list act-pr-debug \
+        sanity-check sanity-clean
 
 help: ## Show this help
 	@echo
 	@echo "Commands:"
-	@grep -E '^[a-zA-Z0-9_.-]+:.*##' $(MAKEFILE_LIST) | \
-	  sed -E 's/^([a-zA-Z0-9_.-]+):.*##[[:space:]]*(.*)/  \1\t\t\2/'
+	@awk -F':.*##' '/^[a-zA-Z0-9_.-]+:.*##/ {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 venv: ## Create .venv and install pip-tools
 	@test -d "$(VENV)" || $(PY) -m venv "$(VENV)"
@@ -107,7 +107,7 @@ type: ## MyPy static type-check
 	$(MYPY) $(PY_SRC)
 
 test: ## Run tests
-	$(PYTEST)
+	$(VENV_BIN)/pytest -qv
 
 cov: ## Tests with coverage report
 	$(PYTEST) --cov=$(COV_TARGET) --cov-report=term-missing
@@ -152,3 +152,20 @@ nuke: ## Remove the virtualenv
 activate: ## Print how to activate the venv
 	@echo "Unix/macOS:  source $(VENV_BIN)/activate"
 	@echo "Windows:     .\\$(VENV)\\Scripts\\activate"
+
+
+# ---------- Packaging & Distributing ----------
+sanity-check: venv ## Build sdist/wheel and verify CLI works
+	$(PIP) install -U pip build
+	$(PIP) install -e .
+	# Ensure the console script is available and prints help
+	$(VENV_BIN)/cgpt --help >/dev/null
+	# Build distribution artifacts
+	$(PYTHON) -m build
+	# Verify artifacts exist
+	@ls dist/*.whl >/dev/null 2>&1 || (echo "❌ wheel not found in dist/"; exit 1)
+	@ls dist/*.tar.gz >/dev/null 2>&1 || (echo "❌ sdist (.tar.gz) not found in dist/"; exit 1)
+	@echo "✅ Sanity check passed: CLI runs and artifacts built (wheel + sdist)."
+
+sanity-clean: ## Remove build artifacts (dist/, build/, *.egg-info)
+	rm -rf dist build *.egg-info
