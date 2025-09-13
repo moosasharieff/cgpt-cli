@@ -12,6 +12,7 @@ Configuration management for the `cgpt` CLI.
 
 import os
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -56,3 +57,33 @@ def _windows_config_home() -> Path:
     if appdata:
         return Path(appdata)
     return Path.home() / "AppData" / "Roaming"
+
+def config_dir() -> Path:
+    """Return the platform-specific directory for cgpt config."""
+    if sys.platform.startswith("win"):
+        return _windows_config_home() / APP_NAME
+    return _xdg_config_home() / APP_NAME
+
+
+def config_path() -> Path:
+    """Return the full path to the cgpt config file (config.toml)."""
+    return config_dir() / CONFIG_FILE
+
+
+def load_config() -> Config:
+    """Load config values from TOML file, if it exists.
+
+    Returns:
+        Config: A Config object with values populated or None if missing.
+    """
+    path = config_path()
+    if not path.exists():
+        return Config()
+
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+
+    return Config(
+        api_key=data.get(KEY_API) or None,
+        base_url=data.get(KEY_BASE_URL) or None,
+    )
