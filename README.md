@@ -5,14 +5,19 @@
 
 Tiny ChatGPT terminal client
 
-* PyPI package: https://pypi.org/project/cgpt-cli/
-* Free software: MIT License
-* Documentation: https://cgpt-cli.readthedocs.io.
+- PyPI package: https://pypi.org/project/cgpt-cli/
+- Free software: MIT License
+- Documentation: https://cgpt-cli.readthedocs.io
 
-## Features
+---
 
-* TODO
+## Quickstart
 
-## Credits
+```bash
+make venv
+make compile
+# Activate virtualenv
+source .venv/bin/activate        # macOS/Linux
+# .\.venv\Scripts\Activate.ps1    # Windows PowerShell
 
-This package was created with [Cookiecutter](https://github.com/audreyfeldroy/cookiecutter) and the [audreyfeldroy/cookiecutter-pypackage](https://github.com/audreyfeldroy/cookiecutter-pypackage) project template.
+make install-dev                  # exact dev env (hash-checked)
