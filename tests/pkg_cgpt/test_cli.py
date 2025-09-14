@@ -43,3 +43,23 @@ def test_login_writes_api_key_only(tmp_path: Path, monkeypatch: MonkeyPatch) -> 
     content: str = cfg_file.read_text(encoding="utf-8")
     assert 'api_key = "sk-abc"' in content
     assert "base_url" not in content
+
+
+def test_login_with_base_url_flag(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    """Login with --base-url flag writes both api_key and base_url."""
+    _set_sandbox_config_home(tmp_path, monkeypatch)
+
+    runner: CliRunner = CliRunner()
+    result: Result = runner.invoke(
+        main,
+        ["login", "--base-url", "https://example.com/v1"],
+        input="sk-xyz\nsk-xyz\n",  # key, confirm
+    )
+
+    assert result.exit_code == 0, result.output
+
+    cfg_file: Path = tmp_path / "cgpt" / "config.toml"
+    content: str = cfg_file.read_text(encoding="utf-8")
+
+    assert 'api_key = "sk-xyz"' in content
+    assert 'base_url = "https://example.com/v1"' in content
