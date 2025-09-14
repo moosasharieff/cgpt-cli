@@ -4,11 +4,19 @@ import os
 import stat
 import sys
 from pathlib import Path
+from typing import Optional
 
 import pytest
 from pytest import MonkeyPatch
 
-from cgpt.config import Config, config_dir, config_path, load_config, save_config
+from cgpt.config import (
+    Config,
+    config_dir,
+    config_path,
+    load_config,
+    save_config,
+    resolve_api_key,
+)
 
 
 def _redirect_config_home(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
@@ -91,9 +99,36 @@ def test_permissions_best_effort_on_unix(
     cfg_path: Path = config_path()
     assert cfg_dir.exists() and cfg_path.exists()
 
+    # Identify filesystem permission bits for dir and file
     dir_mode: int = stat.S_IMODE(os.stat(cfg_dir).st_mode)
     file_mode: int = stat.S_IMODE(os.stat(cfg_path).st_mode)
 
     # Accept exact or stricter bits (umask may influence).
     assert dir_mode & 0o700 == 0o700
     assert file_mode & 0o600 == 0o600
+
+
+def test_resolve_api_key_prefers_config_over_env(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """If config has an API key, it takes precedence over OPENAI_API_KEY env var."""
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+    _redirect_config_home(tmp_path, monkeypatch)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env")
+
+    _ = save_config(Config(api_key="sk-from-config"))
+    resolved: Optional[str] = resolve_api_key()
+    assert resolved == "sk-from-config"
+
+
+def test_resolve_api_key_uses_env_when_no_config(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """If no config file, API key should come from OPENAI_API_KEY."""
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+    _redirect_config_home(tmp_path, monkeypatch)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env-only")
+    resolved: Optional[str] = resolve_api_key()
+    assert resolved == "sk-env-only"
