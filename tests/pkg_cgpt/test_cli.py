@@ -63,3 +63,24 @@ def test_login_with_base_url_flag(tmp_path: Path, monkeypatch: MonkeyPatch) -> N
 
     assert 'api_key = "sk-xyz"' in content
     assert 'base_url = "https://example.com/v1"' in content
+
+
+def test_login_prompt_sets_base_url_yes(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Interactive base URL flow: answer 'y' and enter URL."""
+    _set_sandbox_config_home(tmp_path, monkeypatch)
+
+    runner: CliRunner = CliRunner()
+    result: Result = runner.invoke(
+        main,
+        ["login"],
+        input="sk-123\nsk-123\ny\nhttps://api.local/v1\n",  # key, confirm, 'y', url
+    )
+
+    assert result.exit_code == 0, result.output
+
+    cfg_file: Path = tmp_path / "cgpt" / "config.toml"
+    content: str = cfg_file.read_text(encoding="utf-8")
+    assert 'api_key = "sk-123"' in content
+    assert 'base_url = "https://api.local/v1"' in content
