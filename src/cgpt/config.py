@@ -135,7 +135,7 @@ def resolve_api_key(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
     """Resolve the API key, preferring config file then OPENAI_API_KEY env.
 
     Args:
-        env (Optional[dict[str, str]]): Optional env mapping for testing.
+        env (Optional[Mapping[str, str]]): Optional env mapping for testing.
 
     Returns:
         Optional[str]: The resolved API key, or None if not found.
@@ -147,7 +147,7 @@ def resolve_api_key(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
     return env.get("OPENAI_API_KEY")
 
 
-def resolve_base_url(env: Optional[dict[str, str]] = None) -> Optional[str]:
+def resolve_base_url(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
     """Resolve the base_url from config, no env fallback.
 
     Args:
