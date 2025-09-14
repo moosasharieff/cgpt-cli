@@ -20,11 +20,7 @@ from typing import Optional
 
 import click
 
-from .config import (
-    Config,
-    config_path,
-    save_config,
-)
+from .config import Config, config_path, save_config, update_config
 
 
 @click.group(help="cgpt: Tiny ChatGPT terminal client.")
@@ -91,6 +87,30 @@ def cmd_where() -> None:
     where `cgpt` expects to find it on this platform.
     """
     click.echo(str(config_path()))
+
+
+def _validate_mode(_, __, value: Optional[str]) -> Optional[str]:
+    """Click validator for --mode."""
+    if value is None:
+        return None
+    allowed = {"responses", "chat"}
+    v = value.strip().lower()
+    if v not in allowed:
+        raise click.BadParameter(f"must be one of {', '.join(sorted(allowed))}")
+    return v
+
+
+@main.command("set")
+@click.option("--model", type=str, help="Set default model (e.g  gpt-5, gpt-4o)")
+@click.option(
+    "--mode", callback=_validate_mode, help="Set default mode: 'responses' or 'chat'"
+)
+def cmd_set(model: Optional[str], mode: Optional[str]) -> None:
+    """Update defaults like model and mode."""
+    if model is None and mode is None:
+        raise click.UsageError("Provide at least one option: --model or --mode")
+    path = update_config(default_model=model, default_mode=mode)
+    click.echo(f"✅ Updated defaults in {path}")
 
 
 if __name__ == "__main__":
