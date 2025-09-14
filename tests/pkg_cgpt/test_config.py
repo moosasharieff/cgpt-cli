@@ -16,6 +16,7 @@ from cgpt.config import (
     load_config,
     save_config,
     resolve_api_key,
+    resolve_base_url,
 )
 
 
@@ -132,3 +133,39 @@ def test_resolve_api_key_uses_env_when_no_config(
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-only")
     resolved: Optional[str] = resolve_api_key()
     assert resolved == "sk-env-only"
+
+
+def test_resolve_base_url_only_from_config(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """base_url is resolved only from config (no env fallback)."""
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+    _redirect_config_home(tmp_path, monkeypatch)
+
+    monkeypatch.setenv("BASE_URL", "https://env-ignored")
+    _ = save_config(Config(api_key="sk", base_url="https://from-config"))
+    resolved: Optional[str] = resolve_base_url()
+    assert resolved == "https://from-config"
+
+
+def test_toml_escaping_of_quotes_and_backslashes(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Values with quotes/backslashes should be escaped on write and restored on load."""
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+    _redirect_config_home(tmp_path, monkeypatch)
+
+    tricky_key: str = r'sk-"weird"\path\with\backslashes'
+    tricky_url: str = r'https://api.example.com/v1/"q"?a=1\2'
+
+    written_path: Path = save_config(Config(api_key=tricky_key, base_url=tricky_url))
+    content: str = written_path.read_text(encoding="utf-8")
+
+    # Verify the on-disk TOML contains escaped sequences.
+    assert 'api_key = "sk-\\"weird\\"\\\\path\\\\with\\\\backslashes"' in content
+    assert 'base_url = "https://api.example.com/v1/\\"q\\"?a=1\\\\2"' in content
+
+    # Round-trip: load back to original strings.
+    cfg: Config = load_config()
+    assert cfg.api_key == tricky_key
+    assert cfg.base_url == tricky_url

@@ -147,11 +147,8 @@ def resolve_api_key(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
     return env.get("OPENAI_API_KEY")
 
 
-def resolve_base_url(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
-    """Resolve the base_url from config, no env fallback.
-
-    Args:
-        env (Optional[dict[str, str]]): Included for symmetry; unused.
+def resolve_base_url() -> Optional[str]:
+    """Resolve the base_url from config (no env fallback).
 
     Returns:
         Optional[str]: The resolved base_url, or None if not found.
