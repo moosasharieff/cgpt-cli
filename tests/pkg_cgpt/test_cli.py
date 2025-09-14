@@ -1,23 +1,17 @@
-import sys
-import subprocess
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Optional
+
+from click.testing import CliRunner
+from pytest import MonkeyPatch
+
+from cgpt.cli import main
+from cgpt.config import config_path
 
 
-def run_cgpt(args=None):
-    """Helper to run the cgpt CLI and capture output."""
-    cmd = [sys.executable, "-m", "cgpt.cli"]
-    if args:
-        cmd.extend(args)
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    return result.stdout.strip()
-
-
-def test_cli_default():
-    """Running cgpt with no args should greet 'World'."""
-    output = run_cgpt([])
-    assert "Hello, World!" in output
-
-
-def test_cli_with_name():
-    """Running cgpt with --name should greet the given name."""
-    output = run_cgpt(["--name", "Moosa"])
-    assert "Hello, Moosa!" in output
+def _set_sandbox_config_home(monkeypatch, tmp_path: Path) -> None:
+    """Redirect config home (XDG/APPDATA) to a sandbox tmp_path for testing."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("APPDATA", str(tmp_path))
