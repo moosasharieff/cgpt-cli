@@ -13,7 +13,7 @@ Configuration management for the `cgpt` CLI.
 import os
 import sys
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional, Mapping
 
@@ -23,6 +23,8 @@ CONFIG_FILE = "config.toml"
 # Keys in the TOML file
 KEY_API = "api_key"
 KEY_BASE_URL = "base_url"
+KEY_DEFAULT_MODEL = "default_model"
+KEY_DEFAULT_MODE = "default_mode"
 
 
 @dataclass
@@ -32,10 +34,14 @@ class Config:
     Attributes:
         api_key (Optional[str]): User's API key, or None if unset.
         base_url (Optional[str]): Optional base URL for API, or None if unset.
+        default_model (Optional[str]) = Optional ChatGPT Model or None if unset.
+        default_mode: (Optional[str]) = "responses" | "chat" or None if unset.
     """
 
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    default_model: Optional[str] = None
+    default_mode: Optional[str] = None
 
 
 def _xdg_config_home() -> Path:
@@ -72,6 +78,14 @@ def config_path() -> Path:
     return config_dir() / CONFIG_FILE
 
 
+def _normalize_str(value: Optional[str]) -> Optional[str]:
+    """Normalize a string field: treat empty/whitespace-only string as None."""
+    if value is None:
+        return None
+    v = value.strip()
+    return v if v else None
+
+
 def load_config() -> Config:
     """Load config values from TOML file, if it exists.
 
@@ -88,6 +102,8 @@ def load_config() -> Config:
     return Config(
         api_key=data.get(KEY_API) or None,
         base_url=data.get(KEY_BASE_URL) or None,
+        default_model=data.get(KEY_DEFAULT_MODEL) or None,
+        default_mode=data.get(KEY_DEFAULT_MODE) or None,
     )
 
 
@@ -113,10 +129,14 @@ def save_config(cfg: Config) -> Path:
         pass
 
     lines = []
-    if cfg.api_key is not None:
+    if cfg.api_key:
         lines.append(f'{KEY_API} = "{_escape(cfg.api_key)}"')
-    if cfg.base_url is not None:
+    if cfg.base_url:
         lines.append(f'{KEY_BASE_URL} = "{_escape(cfg.base_url)}"')
+    if cfg.default_model:
+        lines.append(f"{KEY_DEFAULT_MODEL} = {_escape(cfg.default_model)}")
+    if cfg.default_mode:
+        lines.append(f"{KEY_DEFAULT_MODE} = {_escape(cfg.default_mode)}")
 
     content = "\n".join(lines) + ("\n" if lines else "")
     p = config_path()
@@ -129,6 +149,25 @@ def save_config(cfg: Config) -> Path:
         pass
 
     return p
+
+
+def update_config(**kwargs: Optional[str]) -> Path:
+    """Merge provided fields into the existing config and save.
+
+    Accepts only: api_key, base_url, default_model, default_mode.
+    Values of None are ignored (existing values remain unchanged).
+    Empty strings are normalized to None.
+    """
+    current = load_config()
+    allowed = {"api_key", "base_url", "default_model", "default_mode"}
+    cleaned: dict[str, Optional[str]] = {}
+
+    for key, value in kwargs.items():
+        if key in allowed and value is not None:
+            cleaned[key] = _normalize_str(value)
+
+    new_config = replace(current, **cleaned)
+    return save_config(new_config)
 
 
 def resolve_api_key(env: Optional[Mapping[str, str]] = None) -> Optional[str]:
