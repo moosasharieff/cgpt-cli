@@ -24,29 +24,26 @@ make install-dev
 
 ## Authentication
 
-Store your API key (and optional base URL):
+Get an OpenAI API key from:
+👉 [https://platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys)
+
+Store it via CLI:
 
 ```bash
 cgpt login
-cgpt where   # show config path
 ```
 
-Example:
-
-```text
-$ cgpt login
-Enter API key: ********
-Repeat for confirmation: ********
-Do you want to set a custom base URL? [y/N]: n
-✅ Saved credentials to: /home/you/.config/cgpt/config.toml
-```
-
-Config is stored at:
+Config path:
 
 * Linux/macOS: `~/.config/cgpt/config.toml`
 * Windows: `%APPDATA%\cgpt\config.toml`
 
-If no config is found, `OPENAI_API_KEY` env var is used.
+If no config is found, `OPENAI_API_KEY` env var is used:
+
+```bash
+export OPENAI_API_KEY="your-key"   # macOS/Linux
+setx OPENAI_API_KEY "your-key"     # Windows PowerShell
+```
 
 
 
