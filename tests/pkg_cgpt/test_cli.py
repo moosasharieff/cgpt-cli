@@ -141,3 +141,16 @@ def test_set_both_and_preserve_existing(
     assert 'api_key = "sk-xyz"' in cfg_text
     assert "default_model = gpt-4o-mini" in cfg_text
     assert "default_mode = chat" in cfg_text
+
+
+def test_set_requires_at_least_one_option(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Calling `cgpt set` with no options should raise a usage error."""
+    _set_sandbox_config_home(tmp_path, monkeypatch)
+
+    runner: CliRunner = CliRunner()
+    result: Result = runner.invoke(main, ["set"])
+
+    assert result.exit_code != 0
+    assert "at least one option" in result.output.lower()
