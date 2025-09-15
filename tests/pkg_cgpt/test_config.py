@@ -169,3 +169,20 @@ def test_toml_escaping_of_quotes_and_backslashes(
     cfg: Config = load_config()
     assert cfg.api_key == tricky_key
     assert cfg.base_url == tricky_url
+
+
+def test_atomic_write_preserves_symlink(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+    _redirect_config_home(tmp_path, monkeypatch)
+
+    real = tmp_path / "real-config.toml"
+    real.write_text("", encoding="utf-8")
+    link = config_path()
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(real)
+
+    save_config(Config(default_model="gpt-5"))
+    assert link.is_symlink()  # link still a symlink
+    assert 'default_model = "gpt-5"' in real.read_text(encoding="utf-8")

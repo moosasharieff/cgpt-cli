@@ -81,15 +81,32 @@ def config_path() -> Path:
     return config_dir() / CONFIG_FILE
 
 
-def _atomic_write_text(path: Path, data: str) -> None:
-    """Atomically write `data` to `path`."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + f".tmp-{int(time.time() * 1000)}")
+def _atomic_write_text(path: Path, data: str, *, follow_symlink: bool = True) -> None:
+    """Atomically write `data` to `path`.
+
+    If `path` is a symlink and `follow_symlink` is True (default), write to the
+    symlink *target* atomically, keeping the link intact. Otherwise, replace the
+    symlink itself.
+    """
+    # Choose final destination
+    dest = path
+    if follow_symlink:
+        try:
+            # `os.path.islink` works even when the link target is missing
+            if os.path.islink(path):
+                dest = Path(os.path.realpath(path))
+        except OSError:
+            dest = path  # fall back
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # tmp beside the final destination to keep rename atomic on the same FS
+    tmp = dest.parent / (dest.name + f".tmp-{int(time.time() * 1000)}")
     with open(tmp, "w", encoding="utf-8", newline="\n") as file:
         file.write(data)
         file.flush()
         os.fsync(file.fileno())
-    os.replace(tmp, path)
+    os.replace(tmp, dest)
 
 
 def _dump_toml(data: Mapping[str, Any]) -> str:
