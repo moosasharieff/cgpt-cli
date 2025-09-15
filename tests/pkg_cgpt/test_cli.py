@@ -106,7 +106,7 @@ def test_set_model_only(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 0, result.output
 
     cfg_text: str = _read_cfg(tmp_path)
-    assert "default_model = gpt-5" in cfg_text
+    assert 'default_model = "gpt-5"' in cfg_text
 
 
 def test_set_mode_only(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
@@ -118,7 +118,7 @@ def test_set_mode_only(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
 
     assert result.exit_code == 0, result.output
     cfg_text: str = _read_cfg(tmp_path)
-    assert "default_mode = responses" in cfg_text
+    assert 'default_mode = "responses"' in cfg_text
 
 
 def test_set_both_and_preserve_existing(
@@ -139,8 +139,8 @@ def test_set_both_and_preserve_existing(
     assert result.exit_code == 0, result.output
     cfg_text: str = _read_cfg(tmp_path)
     assert 'api_key = "sk-xyz"' in cfg_text
-    assert "default_model = gpt-4o-mini" in cfg_text
-    assert "default_mode = chat" in cfg_text
+    assert 'default_model = "gpt-4o-mini"' in cfg_text
+    assert 'default_mode = "chat"' in cfg_text
 
 
 def test_set_requires_at_least_one_option(
