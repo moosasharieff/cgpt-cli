@@ -14,6 +14,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import time
 import tomllib
 from dataclasses import dataclass, replace
@@ -101,12 +102,28 @@ def _atomic_write_text(path: Path, data: str, *, follow_symlink: bool = True) ->
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     # tmp beside the final destination to keep rename atomic on the same FS
-    tmp = dest.parent / (dest.name + f".tmp-{int(time.time() * 1000)}")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as file:
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        newline="\n",
+        dir=dest.parent,
+        prefix=f".{dest.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as file:
+        tmp_path = Path(file.name)
         file.write(data)
         file.flush()
         os.fsync(file.fileno())
-    os.replace(tmp, dest)
+
+    try:
+        os.replace(tmp_path, dest)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def _dump_toml(data: Mapping[str, Any]) -> str:
