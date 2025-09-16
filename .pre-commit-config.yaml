@@ -23,6 +23,9 @@ repos:
         entry: python -m mypy
         language: system
         types: [python]
+        env:
+          MYPY PATH: src
+          args: ["src", "tests"]
 
   # Basics: whitespace, eof, merge conflicts
   - repo: https://github.com/pre-commit/pre-commit-hooks
