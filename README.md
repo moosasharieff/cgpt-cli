@@ -31,6 +31,7 @@ Store it via CLI:
 
 ```bash
 cgpt login
+cgpt where   # show config path
 ```
 
 Config path:
@@ -43,6 +44,31 @@ If no config is found, `OPENAI_API_KEY` env var is used:
 ```bash
 export OPENAI_API_KEY="your-key"   # macOS/Linux
 setx OPENAI_API_KEY "your-key"     # Windows PowerShell
+```
+
+
+
+## Configure Defaults
+
+Use `cgpt set` to configure defaults like model and mode:
+
+```bash
+# Set a default model
+cgpt set --model gpt-4o
+
+# Set default mode (responses | chat)
+cgpt set --mode responses
+
+# Set both model and mode at once
+cgpt set --model gpt-4o-mini --mode chat
+```
+
+Example config file:
+
+```toml
+api_key       = "sk-...redacted..."
+default_model = "gpt-4o-mini"
+default_mode  = "chat"
 ```
 
 

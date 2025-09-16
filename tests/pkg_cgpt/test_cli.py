@@ -7,7 +7,7 @@ from click.testing import CliRunner, Result
 from pytest import MonkeyPatch
 
 from cgpt.cli import main
-from cgpt.config import config_path
+from cgpt.config import config_path, update_config
 
 
 CFG_SUBPATH: Final[str] = "cgpt/config.toml"
@@ -106,4 +106,51 @@ def test_set_model_only(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     assert result.exit_code == 0, result.output
 
     cfg_text: str = _read_cfg(tmp_path)
-    assert "default_model = gpt-5" in cfg_text
+    assert 'default_model = "gpt-5"' in cfg_text
+
+
+def test_set_mode_only(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    """`cgpt set --mode responses` writes only `default_mode`."""
+    _set_sandbox_config_home(tmp_path, monkeypatch)
+
+    runner: CliRunner = CliRunner()
+    result: Result = runner.invoke(main, ["set", "--mode", "responses"])
+
+    assert result.exit_code == 0, result.output
+    cfg_text: str = _read_cfg(tmp_path)
+    assert 'default_mode = "responses"' in cfg_text
+
+
+def test_set_both_and_preserve_existing(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Setting both options updates them and preserves other existing keys."""
+    _set_sandbox_config_home(tmp_path, monkeypatch)
+
+    # Prepopulate another field to ensure it is preserved on update
+    update_config(api_key="sk-xyz")
+
+    runner: CliRunner = CliRunner()
+    result: Result = runner.invoke(
+        main,
+        ["set", "--model", "gpt-4o-mini", "--mode", "chat"],
+    )
+
+    assert result.exit_code == 0, result.output
+    cfg_text: str = _read_cfg(tmp_path)
+    assert 'api_key = "sk-xyz"' in cfg_text
+    assert 'default_model = "gpt-4o-mini"' in cfg_text
+    assert 'default_mode = "chat"' in cfg_text
+
+
+def test_set_requires_at_least_one_option(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """Calling `cgpt set` with no options should raise a usage error."""
+    _set_sandbox_config_home(tmp_path, monkeypatch)
+
+    runner: CliRunner = CliRunner()
+    result: Result = runner.invoke(main, ["set"])
+
+    assert result.exit_code != 0
+    assert "at least one option" in result.output.lower()

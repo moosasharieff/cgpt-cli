@@ -10,12 +10,16 @@ Configuration management for the `cgpt` CLI.
 - Falls back to the environment variable OPENAI_API_KEY if no config is found.
 """
 
+import io
+import json
 import os
 import sys
+import tempfile
+import time
 import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Optional, Mapping
+from typing import Optional, Mapping, Any
 
 APP_NAME = "cgpt"
 CONFIG_FILE = "config.toml"
@@ -78,6 +82,72 @@ def config_path() -> Path:
     return config_dir() / CONFIG_FILE
 
 
+def _atomic_write_text(path: Path, data: str, *, follow_symlink: bool = True) -> None:
+    """Atomically write `data` to `path`.
+
+    If `path` is a symlink and `follow_symlink` is True (default), write to the
+    symlink *target* atomically, keeping the link intact. Otherwise, replace the
+    symlink itself.
+    """
+    # Choose final destination
+    dest = path
+    if follow_symlink:
+        try:
+            # `os.path.islink` works even when the link target is missing
+            if os.path.islink(path):
+                dest = Path(os.path.realpath(path))
+        except OSError:
+            dest = path  # fall back
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # tmp beside the final destination to keep rename atomic on the same FS
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        newline="\n",
+        dir=dest.parent,
+        prefix=f".{dest.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as file:
+        tmp_path = Path(file.name)
+        file.write(data)
+        file.flush()
+        os.fsync(file.fileno())
+
+    try:
+        os.replace(tmp_path, dest)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _dump_toml(data: Mapping[str, Any]) -> str:
+    """Serialize a (flat) mapping to TOML using a minimal, safe writer.
+
+    Supports str/bool/int/float scalars. For anything else, values are
+    JSON-encoded into a quoted TOML string to remain valid.
+    """
+    buf = io.StringIO()
+    for key, value in data.items():
+        if isinstance(value, str):
+            buf.write(f'{key} = "{_toml_escape(value)}"\n')
+        elif isinstance(value, bool):
+            buf.write(f"{key} = {'true' if value else 'false'}\n")
+        elif isinstance(value, (int, float)):
+            buf.write(f"{key} = {value}\n")
+        else:
+            # Store unknown types as JSON inside a TOML string
+            buf.write(
+                f'{key} = "{_toml_escape(json.dumps(value, ensure_ascii=False))}"\n'
+            )
+    return buf.getvalue()
+
+
 def _normalize_str(value: Optional[str]) -> Optional[str]:
     """Normalize a string field: treat empty/whitespace-only string as None."""
     if value is None:
@@ -87,32 +157,55 @@ def _normalize_str(value: Optional[str]) -> Optional[str]:
 
 
 def load_config() -> Config:
-    """Load config values from TOML file, if it exists.
+    """Load configuration from ``config_path()`` (TOML).
+
+    Behavior:
+    - If the file does not exist → return an empty/default ``Config()``.
+    - If the file is valid TOML → return a ``Config`` populated from keys.
+    - If the file is malformed → rename it to ``.bad-<timestamp>`` and return
+      an empty/default ``Config()`` (no crash).
 
     Returns:
-        Config: A Config object with values populated or None if missing.
+        Config: Always a Config instance. Missing/invalid values become ``None``.
     """
-    path = config_path()
+    path: Path = config_path()
     if not path.exists():
         return Config()
 
-    with path.open("rb") as f:
-        data = tomllib.load(f)
+    try:
+        with path.open("rb") as f:
+            data: dict = tomllib.load(f)
+    except tomllib.TOMLDecodeError:
+        # Preserve the broken file for debugging, then fall back to defaults.
+        try:
+            path.rename(path.with_suffix(path.suffix + f".bad-{int(time.time())}"))
+        except OSError:
+            # If we can't move it, still continue with defaults.
+            pass
+        return Config()
+    except OSError:
+        # IO errors: treat as missing and return defaults.
+        return Config()
+
+    def _get_str(key: str) -> Optional[str]:
+        val = data.get(key)
+        return val if isinstance(val, str) and val.strip() else None
 
     return Config(
-        api_key=data.get(KEY_API) or None,
-        base_url=data.get(KEY_BASE_URL) or None,
-        default_model=data.get(KEY_DEFAULT_MODEL) or None,
-        default_mode=data.get(KEY_DEFAULT_MODE) or None,
+        api_key=_get_str(KEY_API),
+        base_url=_get_str(KEY_BASE_URL),
+        default_model=_get_str(KEY_DEFAULT_MODEL),
+        default_mode=_get_str(KEY_DEFAULT_MODE),
     )
 
 
 def save_config(cfg: Config) -> Path:
-    """Save the given Config object to a TOML file.
+    """Persist the given config to TOML atomically with correct quoting.
 
-    Creates the config directory if necessary.
-    Sets secure permissions on Unix (700 for dir, 600 for file).
-    Escapes backslashes/quotes to preserve TOML validity.
+    - Creates the config directory if necessary.
+    - Uses _dump_toml to ensure strings are quoted (valid TOML).
+    - Writes via _atomic_write_text to prevent partial files.
+    - Sets secure permissions on Unix (700 dir, 600 file).
 
     Args:
         cfg (Config): Config values to save.
@@ -128,19 +221,19 @@ def save_config(cfg: Config) -> Path:
     except Exception:
         pass
 
-    lines = []
-    if cfg.api_key:
-        lines.append(f'{KEY_API} = "{_escape(cfg.api_key)}"')
-    if cfg.base_url:
-        lines.append(f'{KEY_BASE_URL} = "{_escape(cfg.base_url)}"')
-    if cfg.default_model:
-        lines.append(f"{KEY_DEFAULT_MODEL} = {_escape(cfg.default_model)}")
-    if cfg.default_mode:
-        lines.append(f"{KEY_DEFAULT_MODE} = {_escape(cfg.default_mode)}")
+    # Only include keys that are not None
+    data: dict[str, Any] = {}
+    if cfg.api_key is not None:
+        data[KEY_API] = cfg.api_key
+    if cfg.base_url is not None:
+        data[KEY_BASE_URL] = cfg.base_url
+    if cfg.default_model is not None:
+        data[KEY_DEFAULT_MODEL] = cfg.default_model
+    if cfg.default_mode is not None:
+        data[KEY_DEFAULT_MODE] = cfg.default_mode
 
-    content = "\n".join(lines) + ("\n" if lines else "")
     p = config_path()
-    p.write_text(content, encoding="utf-8")
+    _atomic_write_text(p, _dump_toml(data))
 
     try:
         if not sys.platform.startswith("win"):
@@ -149,6 +242,33 @@ def save_config(cfg: Config) -> Path:
         pass
 
     return p
+
+
+def _toml_escape(s: str) -> str:
+    """Escape a Python string for TOML basic strings."""
+    out = []
+    for ch in s:
+        if ch == '"':
+            out.append('\\"')
+        elif ch == "\\":
+            out.append("\\\\")
+        elif ch == "\b":
+            out.append("\\b")
+        elif ch == "\t":
+            out.append("\\t")
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\f":
+            out.append("\\f")
+        elif ch == "\r":
+            out.append("\\r")
+        else:
+            # Escape any remaining control chars < 0x20
+            if ord(ch) < 0x20:
+                out.append(f"\\u{ord(ch):04X}")
+            else:
+                out.append(ch)
+    return "".join(out)
 
 
 def update_config(**kwargs: Optional[str]) -> Path:
