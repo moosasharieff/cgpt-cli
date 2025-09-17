@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, Optional
+from typing import Dict, Optional, Iterator
 
 import requests
 
@@ -74,6 +74,33 @@ def _extract_responses_text(event: dict) -> Optional[str]:
     return None
 
 
+def _extract_stream_delta(event: dict) -> Optional[str]:
+    """Best-effort delta extraction for streaming events.
+
+    Handles:
+      - Responses stream: {"type":"...output_text.delta","delta":"..."}
+      - Chat stream: {"choices":[{"delta":{"content":"..."}}]}
+      - Fallback: {"output_text":"..."} (accumulated)
+    """
+    etype = event.get("type")
+    if isinstance(etype, str) and etype.endswith("output_text.delta"):
+        delta = event.get("delta")
+        if isinstance(delta, str):
+            return delta
+
+    choices = event.get("choices")
+    if isinstance(choices, list) and choices:
+        delta = (choices[0].get("delta") or {}).get("content")
+        if isinstance(delta, str):
+            return delta
+
+    out_text = event.get("output_text")
+    if isinstance(out_text, str):
+        return out_text
+
+    return None
+
+
 def ask_once(
     *,
     api_key: str,
@@ -115,3 +142,76 @@ def ask_once(
         _extract_chat_text(data) if model == "chat" else _extract_responses_text(data)
     )
     return text if text is not None else json.dumps(data, ensure_ascii=False)
+
+
+def ask_stream(
+    *,
+    api_key: str,
+    prompt: str,
+    model: str,
+    mode: str = "responses",
+    base_url: Optional[str] = None,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> Iterator[str]:
+    """
+    Call the API with streaming enabled and yield text fragments.
+
+    This function enables real-time streaming of model output using
+    Server-Sent Events (SSE) or chunked responses. It normalizes common
+    event formats from both the Responses and Chat APIs, so the caller
+    can iterate over plain text fragments without handling protocol details.
+
+    Args:
+        api_key: Bearer token for API authentication.
+        prompt: User input prompt (single-turn).
+        model: Model identifier (e.g., "gpt-4o", "gpt-4o-mini").
+        mode: Which API surface to call: "responses" (default) or "chat".
+        base_url: Optional override for the API base URL. Falls back to
+            DEFAULT_BASE_URL ("https://api.openai.com/v1").
+        timeout: HTTP timeout in seconds (default: 300).
+
+    Yields:
+        str: Text fragments as soon as they are available. The caller is
+        expected to print them incrementally (with `nl=False`) and add a
+        final newline after the stream ends.
+
+    Raises:
+        requests.HTTPError: If the server responds with an error status.
+        requests.RequestException: On transport-level errors or timeouts.
+    """
+    url = endpoint_for(mode, base_url)
+    if mode.lower() == "chat":
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        }
+    else:
+        payload = {"model": model, "input": prompt, "stream": True}
+
+    with requests.post(
+        url,
+        headers=auth_headers(api_key),
+        data=json.dumps(payload),
+        stream=True,
+        timeout=timeout,
+    ) as resp:
+        resp.raise_for_status()
+
+        for raw in resp.iter_lines(decode_unicode=True):
+            if not raw:
+                continue
+            line = raw[5:].strip() if raw.startswith("data:") else raw.strip()
+            if line == "[DONE]":
+                break
+
+            try:
+                event = json.loads(line)
+            except Exception:
+                # unknown chunk shape data is emitted for use to see
+                yield line
+                continue
+
+            delta = _extract_stream_delta(event)
+            if delta is not None:
+                yield delta
